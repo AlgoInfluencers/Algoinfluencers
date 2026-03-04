@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import ForceGraph2D from 'react-force-graph-2d';
-import axios from 'axios';
+import { api } from '@/lib/api';
 
 export default function NetworkGraph({ onNodeClick }: { onNodeClick?: (node: any) => void }) {
     const fgRef = useRef();
@@ -11,7 +11,7 @@ export default function NetworkGraph({ onNodeClick }: { onNodeClick?: (node: any
 
     useEffect(() => {
         // Fetch graph data from backend
-        axios.get('http://localhost:8000/api/network/')
+        api.network.getGraph()
             .then(res => {
                 setGraphData(res.data);
                 setLoading(false);

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from 'react';
-import axios from 'axios';
+import { api } from '@/lib/api';
 import styles from './ViralPrediction.module.css';
 
 export default function ViralPrediction() {
@@ -29,7 +29,7 @@ export default function ViralPrediction() {
         };
 
         try {
-            const res = await axios.post('http://localhost:8000/api/predict/', payload);
+            const res = await api.predict.viralProbability(payload);
             setPrediction(res.data.prediction);
         } catch (err) {
             console.error("Failed to predict", err);

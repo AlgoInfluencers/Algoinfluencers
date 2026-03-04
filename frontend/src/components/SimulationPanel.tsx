@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from 'react';
-import axios from 'axios';
+import { api } from '@/lib/api';
 import styles from './SimulationPanel.module.css';
 
 export default function SimulationPanel({
@@ -18,7 +18,7 @@ export default function SimulationPanel({
 
         setRunning(true);
         try {
-            const res = await axios.post('http://localhost:8000/api/simulation/run', {
+            const res = await api.simulation.run({
                 model_type: modelType,
                 seed_nodes: [selectedNode.id],
                 probability: 0.15,
