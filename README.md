@@ -180,6 +180,87 @@ Convert to edge‑list (u v) for ingestion by the C++ engine. For large graphs, 
 4) Frontend: visualize network; wire controls to APIs; add analytics charts
 
 
+## Visualization Guide
+
+### Live Demo (Local)
+1) Start backend
+```
+cd backend
+python -m venv venv && source venv/bin/activate  # Windows: venv\Scripts\activate
+pip install -r requirements.txt
+uvicorn app.main:app --reload
+```
+2) Start frontend
+```
+cd frontend
+npm install
+npm run dev
+```
+3) Open the dashboard at http://localhost:3000 and:
+- Load the network (it will request /api/network)
+- Select a seed node, probability p, steps
+- Click Simulate to visualize cascade growth over time
+- Use the Viral Prediction panel to submit features and view the probability output
+
+
+### Architecture Diagram (Mermaid)
+```mermaid
+flowchart LR
+  A[Next.js Dashboard] -->|HTTP| B[FastAPI Backend]
+  B -->|subprocess JSON| C[C++ Engine]
+  B -->|pickle inference| D[ML Model (scikit-learn)]
+  C -->|metrics / cascade| B
+  D -->|viral probability| B
+  B -->|JSON| A
+```
+
+### Data Flow (Mermaid)
+```mermaid
+sequenceDiagram
+  participant FE as Frontend (Next.js)
+  participant BE as Backend (FastAPI)
+  participant ENG as Engine (C++)
+  participant ML as ML Model
+
+  FE->>BE: GET /api/network
+  BE->>ENG: run engine --mode metrics --edges dataset/edges.txt
+  ENG-->>BE: {nodes, edges, top_degree, top_pagerank}
+  BE-->>FE: JSON graph + influencer scores
+
+  FE->>BE: POST /api/simulation {seed, p, steps}
+  BE->>ENG: run engine --mode simulate --seed S --p P --steps K
+  ENG-->>BE: {activated_per_step, total_activated}
+  BE-->>FE: JSON cascade series
+
+  FE->>BE: POST /api/predict {features}
+  BE->>ML: predict(features)
+  ML-->>BE: {viral_probability}
+  BE-->>FE: JSON probability
+```
+
+### Diffusion Cascade Example (IC)
+```mermaid
+stateDiagram-v2
+  [*] --> Step0
+  Step0: Seed activated (1 node)
+  Step0 --> Step1: Infect neighbors (p)
+  Step1: +5 activated
+  Step1 --> Step2: Infect neighbors (p)
+  Step2: +12 activated
+  Step2 --> Step3: Infect neighbors (p)
+  Step3: +9 activated
+  Step3 --> [*]
+```
+
+### Screenshots (placeholders)
+Add screenshots to a docs/ directory and reference them here.
+- Network Graph: ![Network Graph](docs/screenshots/network-graph.png)
+- Cascade Simulation: ![Cascade Simulation](docs/screenshots/cascade.png)
+- Viral Prediction: ![Viral Prediction](docs/screenshots/viral-prediction.png)
+
+Tip: Use the browser’s dev tools Performance tab to capture an animation GIF and embed it.
+
+
 ## Roadmap
 - Add Linear Threshold (LT) diffusion model in C++
 - Persist simulations and predictions (SQLite/PostgreSQL) via SQLAlchemy
@@ -201,5 +282,3 @@ Python packages (backend/requirements.txt):
 ## License
 MIT License. See LICENSE.
 
----
-If you use this for a final‑year project: include architecture diagrams, dataset sources, evaluation metrics (AUC/F1), and ablation comparisons (IC vs LT; PR vs degree). This turns a solid build into a publish‑worthy submission.
