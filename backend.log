@@ -1,6 +1,14 @@
 INFO:     Will watch for changes in these directories: ['/Users/arghy/Downloads/Desktop/AlgoInfluencers/backend']
 INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
-INFO:     Started reloader process [77530] using StatReload
-INFO:     Started server process [77533]
+INFO:     Started reloader process [94781] using StatReload
+INFO:     Started server process [94784]
 INFO:     Waiting for application startup.
 INFO:     Application startup complete.
+✅ Loaded pre-trained RandomForest model (AUC: 1.0)
+INFO:     127.0.0.1:51351 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51388 - "GET /api/network/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51390 - "GET /api/network/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51392 - "OPTIONS /api/predict/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51392 - "POST /api/predict/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51392 - "GET /api/network/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51394 - "GET /api/network/ HTTP/1.1" 200 OK

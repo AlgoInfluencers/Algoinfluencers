@@ -1,94 +1,137 @@
+"""
+Viral Prediction Model — loads a pre-trained model from disk.
+
+Trained on Kaggle's Social Media Viral Content & Engagement Metrics dataset.
+Run training: python -m app.models.train_model
+"""
+
 import numpy as np
-import pandas as pd
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.preprocessing import StandardScaler
+import json
+from pathlib import Path
+import joblib
+
+SAVE_DIR = Path(__file__).resolve().parent / "saved"
+
 
 class ViralPredictor:
     def __init__(self):
-        self.model = RandomForestClassifier(n_estimators=100, random_state=42)
-        self.scaler = StandardScaler()
+        self.model = None
+        self.scaler = None
+        self.metadata = None
+        self.label_encoders = None
         self.is_trained = False
-        self._train_mock_model()
+        self._load_model()
 
-    def _generate_synthetic_data(self, samples=1000):
-        """
-        Generates synthetic training data for the viral prediction model.
-        Features: followers, engagement_rate, past_interactions, content_sentiment, posting_hour
-        """
-        np.random.seed(42)
-        
-        followers = np.random.lognormal(mean=8.0, sigma=1.5, size=samples)
-        engagement_rate = np.random.uniform(0.01, 0.20, size=samples)
-        past_interactions = np.random.poisson(lam=50, size=samples)
-        content_sentiment = np.random.uniform(-1.0, 1.0, size=samples) 
-        posting_hour = np.random.randint(0, 24, size=samples)
-        
-        # Calculate a latent "virality score" to create labels
-        # Assuming higher followers, engagement, and positive sentiment increase virality
-        # Peak hours (e.g., 9-11 AM, 6-8 PM) also help
-        peak_hour_bonus = np.where((posting_hour >= 9) & (posting_hour <= 11) | (posting_hour >= 18) & (posting_hour <= 20), 1.5, 1.0)
-        
-        latent_score = (
-            np.log1p(followers) * 0.3 + 
-            (engagement_rate * 100) * 0.4 + 
-            np.log1p(past_interactions) * 0.1 + 
-            (content_sentiment + 1) * 0.1
-        ) * peak_hour_bonus
-        
-        # Label as viral (1) if in the top 15% of the score
-        threshold = np.percentile(latent_score, 85)
-        is_viral = (latent_score >= threshold).astype(int)
-        
-        df = pd.DataFrame({
-            'followers': followers,
-            'engagement_rate': engagement_rate,
-            'past_interactions': past_interactions,
-            'content_sentiment': content_sentiment,
-            'posting_hour': posting_hour,
-            'target': is_viral
-        })
-        
-        return df
+    def _load_model(self):
+        """Load the pre-trained model, scaler, encoders, and metadata."""
+        model_path = SAVE_DIR / "model.joblib"
+        scaler_path = SAVE_DIR / "scaler.joblib"
+        encoders_path = SAVE_DIR / "label_encoders.joblib"
+        metadata_path = SAVE_DIR / "metadata.json"
 
-    def _train_mock_model(self):
-        """
-        Trains the RandomForest model on synthetic data.
-        """
-        df = self._generate_synthetic_data()
-        X = df.drop('target', axis=1)
-        y = df['target']
-        
-        X_scaled = self.scaler.fit_transform(X)
-        self.model.fit(X_scaled, y)
-        self.is_trained = True
+        if model_path.exists() and scaler_path.exists():
+            self.model = joblib.load(model_path)
+            self.scaler = joblib.load(scaler_path)
+            if encoders_path.exists():
+                self.label_encoders = joblib.load(encoders_path)
+            if metadata_path.exists():
+                with open(metadata_path, 'r') as f:
+                    self.metadata = json.load(f)
+            self.is_trained = True
+            model_type = self.metadata.get("model_type", "Unknown") if self.metadata else "Unknown"
+            auc = self.metadata.get("auc_roc", "N/A") if self.metadata else "N/A"
+            print(f"✅ Loaded pre-trained {model_type} model (AUC: {auc})")
+        else:
+            print("⚠️  No pre-trained model found. Run: python -m app.models.train_model")
+            self.is_trained = False
 
-    def predict(self, features):
+    def _encode_categorical(self, col_name: str, value: str) -> int:
+        """Safely encode a categorical value using the saved label encoder."""
+        if self.label_encoders and col_name in self.label_encoders:
+            le = self.label_encoders[col_name]
+            if value in le.classes_:
+                return int(le.transform([value])[0])
+        return 0  # Default encoding for unknown values
+
+    def predict(self, features: dict) -> dict:
         """
-        Predicts the viral probability of a given post.
-        features: dict containing 'followers', 'engagement_rate', 'past_interactions', 'content_sentiment', 'posting_hour'
+        Predict the viral probability of a social media post.
+
+        features: dict with keys like:
+            - views, likes, comments, shares (engagement numbers)
+            - engagement_rate, sentiment_score
+            - platform ('Instagram', 'X', 'TikTok', 'YouTube Shorts')
+            - content_type ('text', 'image', 'video', 'carousel')
+            - topic ('Sports', 'Technology', 'Politics', 'Education', 'Entertainment', 'Lifestyle')
+            - hashtags (string like '#tech #ai')
+            - posting_hour (0-23), posting_month (1-12)
         """
         if not self.is_trained:
-            self._train_mock_model()
-            
-        # Ensure correct order
-        feature_array = np.array([[
-            features.get('followers', 1000),
-            features.get('engagement_rate', 0.05),
-            features.get('past_interactions', 10),
-            features.get('content_sentiment', 0.0),
-            features.get('posting_hour', 12)
-        ]])
-        
-        features_scaled = self.scaler.transform(feature_array)
-        
-        probability = self.model.predict_proba(features_scaled)[0][1] # Probability of class 1 (viral)
+            return {
+                "viral": False,
+                "probability": 0.0,
+                "score": 0,
+                "error": "Model not trained. Run: python -m app.models.train_model"
+            }
+
+        # Extract features with sensible defaults
+        views = features.get('views', 100000)
+        likes = features.get('likes', 5000)
+        comments = features.get('comments', 500)
+        shares = features.get('shares', 200)
+        engagement_rate = features.get('engagement_rate', 0.08)
+        sentiment_score = features.get('sentiment_score', 0.0)
+
+        # Categorical features
+        platform = features.get('platform', 'X')
+        content_type = features.get('content_type', 'text')
+        topic = features.get('topic', 'Technology')
+
+        platform_encoded = self._encode_categorical('platform', platform)
+        content_type_encoded = self._encode_categorical('content_type', content_type)
+        topic_encoded = self._encode_categorical('topic', topic)
+
+        # Derived features
+        hashtags_str = features.get('hashtags', '')
+        num_hashtags = len([h for h in hashtags_str.split() if h.startswith('#')]) if hashtags_str else features.get('num_hashtags', 2)
+        posting_hour = features.get('posting_hour', 12)
+        posting_month = features.get('posting_month', 6)
+
+        # Engineered features (must match training pipeline)
+        log_views = np.log1p(views)
+        log_likes = np.log1p(likes)
+        like_share_ratio = likes / (shares + 1)
+        comment_rate = comments / (views + 1)
+
+        import pandas as pd
+        feature_names = [
+            'views', 'likes', 'comments', 'shares',
+            'engagement_rate', 'sentiment_score',
+            'num_hashtags', 'posting_hour', 'posting_month',
+            'platform_encoded', 'content_type_encoded', 'topic_encoded',
+            'log_views', 'log_likes', 'like_share_ratio', 'comment_rate'
+        ]
+        feature_df = pd.DataFrame([[
+            views, likes, comments, shares,
+            engagement_rate, sentiment_score,
+            num_hashtags, posting_hour, posting_month,
+            platform_encoded, content_type_encoded, topic_encoded,
+            log_views, log_likes, like_share_ratio, comment_rate
+        ]], columns=feature_names)
+
+        features_scaled = self.scaler.transform(feature_df)
+
+        probability = float(self.model.predict_proba(features_scaled)[0][1])
         is_viral = bool(self.model.predict(features_scaled)[0])
-        
+
         return {
             "viral": is_viral,
-            "probability": round(float(probability), 4),
-            "score": int(probability * 100)
+            "probability": round(probability, 4),
+            "score": int(probability * 100),
+            "model_type": self.metadata.get("model_type", "Unknown") if self.metadata else "Unknown",
+            "model_auc": self.metadata.get("auc_roc", None) if self.metadata else None
         }
+
 
 # Singleton instance
 ml_predictor = ViralPredictor()

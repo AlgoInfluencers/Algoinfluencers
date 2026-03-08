@@ -1,0 +1,66 @@
+{
+  "model_type": "RandomForest",
+  "auc_roc": 1.0,
+  "dataset": "social_media_viral_content_dataset.csv",
+  "dataset_rows": 32,
+  "features": [
+    "views",
+    "likes",
+    "comments",
+    "shares",
+    "engagement_rate",
+    "sentiment_score",
+    "num_hashtags",
+    "posting_hour",
+    "posting_month",
+    "platform_encoded",
+    "content_type_encoded",
+    "topic_encoded",
+    "log_views",
+    "log_likes",
+    "like_share_ratio",
+    "comment_rate"
+  ],
+  "feature_importances": {
+    "log_views": 0.3515,
+    "views": 0.3202,
+    "log_likes": 0.0947,
+    "engagement_rate": 0.089,
+    "likes": 0.0772,
+    "comment_rate": 0.0507,
+    "like_share_ratio": 0.0116,
+    "comments": 0.0021,
+    "shares": 0.0013,
+    "sentiment_score": 0.0007,
+    "topic_encoded": 0.0003,
+    "content_type_encoded": 0.0002,
+    "num_hashtags": 0.0002,
+    "platform_encoded": 0.0002,
+    "posting_month": 0.0001,
+    "posting_hour": 0.0
+  },
+  "label_encoders": {
+    "platform": {
+      "Instagram": 0,
+      "TikTok": 1,
+      "X": 2,
+      "YouTube Shorts": 3
+    },
+    "content_type": {
+      "carousel": 0,
+      "image": 1,
+      "text": 2,
+      "video": 3
+    },
+    "topic": {
+      "Education": 0,
+      "Entertainment": 1,
+      "Lifestyle": 2,
+      "Politics": 3,
+      "Sports": 4,
+      "Technology": 5
+    }
+  },
+  "n_train_samples": 1600,
+  "n_test_samples": 400
+}

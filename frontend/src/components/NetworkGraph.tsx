@@ -5,7 +5,7 @@ import ForceGraph2D from 'react-force-graph-2d';
 import { api } from '@/lib/api';
 
 export default function NetworkGraph({ onNodeClick }: { onNodeClick?: (node: any) => void }) {
-    const fgRef = useRef();
+    const fgRef = useRef<any>(null);
     const [graphData, setGraphData] = useState({ nodes: [], links: [] });
     const [loading, setLoading] = useState(true);
 
@@ -55,7 +55,8 @@ export default function NetworkGraph({ onNodeClick }: { onNodeClick?: (node: any
                 onNodeClick={handleNodeClick}
                 backgroundColor="transparent"
                 enableNodeDrag={true}
-                enableZoomPanInteraction={true}
+                enableZoomInteraction={true}
+                enablePanInteraction={true}
             />
         </div>
     );

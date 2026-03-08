@@ -4,3 +4,4 @@ networkx
 scikit-learn
 pandas
 numpy
+joblib
