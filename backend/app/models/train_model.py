@@ -44,7 +44,15 @@ def load_and_preprocess(path: Path):
     """Load the Kaggle CSV and engineer features."""
     df = pd.read_csv(path)
     print(f"📂 Loaded dataset: {df.shape[0]} rows, {df.shape[1]} columns")
-    print(f"   Viral: {df[TARGET].sum()} ({df[TARGET].mean()*100:.1f}%) | Non-viral: {(1 - df[TARGET]).sum().astype(int)} ({(1-df[TARGET].mean())*100:.1f}%)")
+    print(f"   Viral: {df[TARGET].sum()} ({df[TARGET].mean()*100:.1f}%) | Non-viral: {(~df[TARGET].astype(bool)).sum()} ({(1-df[TARGET].mean())*100:.1f}%)")
+
+    # --- Data Cleaning ---
+    # Clip extreme engagement_rate outliers (some values > 1.0 look like data errors)
+    q99 = df['engagement_rate'].quantile(0.99)
+    n_clipped = (df['engagement_rate'] > q99).sum()
+    df['engagement_rate'] = df['engagement_rate'].clip(upper=q99)
+    if n_clipped > 0:
+        print(f"   ✂️  Clipped {n_clipped} engagement_rate outliers (> {q99:.4f})")
 
     # --- Feature Engineering ---
 
@@ -62,6 +70,7 @@ def load_and_preprocess(path: Path):
         le = LabelEncoder()
         df[f'{col}_encoded'] = le.fit_transform(df[col].fillna('unknown'))
         label_encoders[col] = le
+        print(f"   📌 {col}: {list(le.classes_)}")
 
     # Log transforms for skewed numerical features
     df['log_views'] = np.log1p(df['views'])
@@ -74,7 +83,7 @@ def load_and_preprocess(path: Path):
     X = df[API_FEATURES].copy()
     y = df[TARGET].copy()
 
-    return X, y, label_encoders
+    return X, y, label_encoders, df.shape[0]
 
 
 def train_and_evaluate():
@@ -85,7 +94,7 @@ def train_and_evaluate():
     print("=" * 60)
 
     # 1. Load data
-    X, y, label_encoders = load_and_preprocess(DATASET_PATH)
+    X, y, label_encoders, total_rows = load_and_preprocess(DATASET_PATH)
     feature_names = list(X.columns)
     print(f"\n📊 Features ({len(feature_names)}):")
     for f in feature_names:
@@ -106,9 +115,10 @@ def train_and_evaluate():
     print("\n🌲 Training RandomForest...")
     rf_model = RandomForestClassifier(
         n_estimators=200,
-        max_depth=15,
-        min_samples_split=5,
-        min_samples_leaf=2,
+        max_depth=8,
+        min_samples_split=10,
+        min_samples_leaf=5,
+        max_features='sqrt',
         class_weight='balanced',
         random_state=42,
         n_jobs=-1
@@ -134,8 +144,11 @@ def train_and_evaluate():
     print("\n🌳 Training GradientBoosting...")
     gb_model = GradientBoostingClassifier(
         n_estimators=200,
-        max_depth=5,
-        learning_rate=0.1,
+        max_depth=4,
+        learning_rate=0.05,
+        min_samples_split=10,
+        min_samples_leaf=5,
+        subsample=0.8,
         random_state=42
     )
     gb_model.fit(X_train_scaled, y_train)
@@ -181,7 +194,7 @@ def train_and_evaluate():
         "model_type": best_name,
         "auc_roc": round(best_auc, 4),
         "dataset": "social_media_viral_content_dataset.csv",
-        "dataset_rows": int(len(importances) + len(feature_names)),  # rough
+        "dataset_rows": total_rows,
         "features": feature_names,
         "feature_importances": {
             feature_names[i]: round(float(importances[i]), 4) for i in sorted_idx
