@@ -22,10 +22,10 @@ async def get_network_stats():
     """
     Returns high-level statistics about the social network graph.
     """
-    nodes = network_graph.num_nodes
+    nodes = network_graph.G.number_of_nodes()
     edges = network_graph.G.number_of_edges()
     return {
         "total_nodes": nodes,
         "total_edges": edges,
-        "density": edges / (nodes * (nodes - 1) / 2) if nodes > 1 else 0
+        "density": edges / (nodes * (nodes - 1)) if nodes > 1 else 0
     }
