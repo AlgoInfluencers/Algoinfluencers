@@ -1,17 +1,27 @@
 import networkx as nx
 import random
+from pathlib import Path
 
 class SocialNetworkGraph:
-    def __init__(self, num_nodes=500, edges_per_new_node=3):
+    def __init__(self, edge_list_path=None):
         """
-        Initialize a scale-free graph representing a social network using the
-        Barabási-Albert preferential attachment model.
+        Load a directed social network from a space-separated edge list.
         """
-        self.num_nodes = num_nodes
-        # Generate scale-free graph
-        self.G = nx.barabasi_albert_graph(n=num_nodes, m=edges_per_new_node, seed=42)
+        if edge_list_path is None:
+            edge_list_path = Path(__file__).resolve().parents[3] / "dataset" / "edges.txt"
+
+        self.edge_list_path = Path(edge_list_path)
+        if not self.edge_list_path.is_file():
+            raise FileNotFoundError(f"Network edge list not found: {self.edge_list_path}")
+
+        self.G = nx.read_edgelist(
+            self.edge_list_path,
+            nodetype=int,
+            create_using=nx.DiGraph,
+        )
+        self.num_nodes = self.G.number_of_nodes()
         
-        # Add attributes to nodes to mimic real users
+        # Add attributes to nodes for the dashboard and influencer ranking.
         self._populate_node_attributes()
 
     def _populate_node_attributes(self):
