@@ -1,11 +1,12 @@
 "use client";
 
 import { Activity, Share2, TrendingUp, Users } from "lucide-react";
-import { useState, Suspense } from "react";
+import { useEffect, useState } from "react";
 import dynamic from 'next/dynamic';
 import styles from "./page.module.css";
 import SimulationPanel from "@/components/SimulationPanel";
 import ViralPrediction from "@/components/ViralPrediction";
+import { api } from "@/lib/api";
 
 // Dynamically import the NetworkGraph with SSR disabled since it uses canvas/window
 const NetworkGraph = dynamic(() => import('@/components/NetworkGraph'), {
@@ -16,6 +17,17 @@ const NetworkGraph = dynamic(() => import('@/components/NetworkGraph'), {
 export default function Home() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [selectedNode, setSelectedNode] = useState<any>(null);
+  const [networkStats, setNetworkStats] = useState<{ total_nodes: number; total_edges: number } | null>(null);
+  const [networkStatsError, setNetworkStatsError] = useState(false);
+
+  useEffect(() => {
+    api.network.getStats()
+      .then((res) => setNetworkStats(res.data))
+      .catch((err) => {
+        console.error("Error fetching network statistics:", err);
+        setNetworkStatsError(true);
+      });
+  }, []);
 
   const handleNodeClick = (node: any) => {
     setSelectedNode(node);
@@ -70,8 +82,10 @@ export default function Home() {
                   <Users size={20} color="var(--accent-secondary)" />
                   <span>Network Nodes</span>
                 </div>
-                <h3>500</h3>
-                <span className={styles.positive}>Scale-Free Topology</span>
+                <h3>{networkStats ? networkStats.total_nodes : "—"}</h3>
+                <span className={networkStatsError ? styles.neutral : styles.positive}>
+                  {networkStatsError ? "Unavailable" : "Loaded dataset"}
+                </span>
               </div>
 
               <div className={`glass-panel ${styles.metricCard}`}>
@@ -79,8 +93,10 @@ export default function Home() {
                   <Share2 size={20} color="var(--accent-primary)" />
                   <span>Network Edges</span>
                 </div>
-                <h3>~1,480</h3>
-                <span className={styles.neutral}>Avg degree = ~3</span>
+                <h3>{networkStats ? networkStats.total_edges : "—"}</h3>
+                <span className={styles.neutral}>
+                  {networkStats ? "Directed connections" : networkStatsError ? "Unavailable" : "Loading..."}
+                </span>
               </div>
 
               <div className={`glass-panel ${styles.metricCard}`}>
