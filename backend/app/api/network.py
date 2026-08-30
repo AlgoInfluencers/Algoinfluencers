@@ -24,8 +24,13 @@ async def get_network_stats():
     """
     nodes = network_graph.G.number_of_nodes()
     edges = network_graph.G.number_of_edges()
+    density = edges / (nodes * (nodes - 1)) if nodes > 1 else 0
+    source_label = getattr(network_graph, "source_label", "dataset/edges.txt")
+
     return {
         "total_nodes": nodes,
         "total_edges": edges,
-        "density": edges / (nodes * (nodes - 1)) if nodes > 1 else 0
+        "density": density,
+        "source": source_label,
+        "source_label": source_label,
     }

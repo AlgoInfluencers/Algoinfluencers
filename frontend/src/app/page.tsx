@@ -17,12 +17,20 @@ const NetworkGraph = dynamic(() => import('@/components/NetworkGraph'), {
 export default function Home() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [selectedNode, setSelectedNode] = useState<any>(null);
-  const [networkStats, setNetworkStats] = useState<{ total_nodes: number; total_edges: number } | null>(null);
+  const [networkStats, setNetworkStats] = useState<{
+    total_nodes: number;
+    total_edges: number;
+    source?: string;
+    source_label?: string;
+  } | null>(null);
   const [networkStatsError, setNetworkStatsError] = useState(false);
 
   useEffect(() => {
     api.network.getStats()
-      .then((res) => setNetworkStats(res.data))
+      .then((res) => {
+        setNetworkStats(res.data);
+        setNetworkStatsError(false);
+      })
       .catch((err) => {
         console.error("Error fetching network statistics:", err);
         setNetworkStatsError(true);
@@ -33,9 +41,10 @@ export default function Home() {
     setSelectedNode(node);
   };
 
+  const sourceLabel = networkStats?.source || networkStats?.source_label || 'dataset/edges.txt';
+
   return (
     <div className="app-container">
-      {/* Sidebar Navigation */}
       <aside className={styles.sidebar}>
         <div className={styles.sidebarLogo}>
           <Share2 className={styles.logoIcon} />
@@ -46,21 +55,18 @@ export default function Home() {
           <button
             className={`${styles.navItem} ${activeTab === 'dashboard' ? styles.active : ''}`}
             onClick={() => setActiveTab('dashboard')}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', width: '100%' }}
           >
             <Activity /> Dashboard
           </button>
           <button
             className={`${styles.navItem} ${activeTab === 'prediction' ? styles.active : ''}`}
             onClick={() => setActiveTab('prediction')}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', width: '100%' }}
           >
             <TrendingUp /> Viral Prediction
           </button>
         </nav>
       </aside>
 
-      {/* Main Content Area */}
       <main className="main-content">
         <header className={styles.header}>
           <div>
@@ -68,14 +74,21 @@ export default function Home() {
               {activeTab === 'dashboard' ? "Platform Overview" : "Viral Content Predictor"}
             </h1>
             <p className="text-secondary">
-              {activeTab === 'dashboard' ? "Analyze influence and predict viral trends in real-time." : "Machine learning powered virality scoring based on author and content metrics."}
+              {activeTab === 'dashboard'
+                ? "Analyze influence and predict viral trends in real-time."
+                : "Machine learning powered virality scoring based on author and content metrics."}
             </p>
           </div>
+          {activeTab === 'dashboard' && (
+            <div className={styles.sourceBadge}>
+              <span className={styles.sourceLabel}>Network source</span>
+              <strong>{sourceLabel}</strong>
+            </div>
+          )}
         </header>
 
         {activeTab === 'dashboard' && (
           <>
-            {/* Dashboard Metrics */}
             <section className={styles.metricsGrid}>
               <div className={`glass-panel ${styles.metricCard}`}>
                 <div className={styles.metricHeader}>
@@ -109,17 +122,18 @@ export default function Home() {
               </div>
             </section>
 
-            <div style={{ display: 'flex', gap: '2rem', height: '600px' }}>
-              {/* Main Visualization */}
-              <section className={`glass-panel ${styles.mainVisPlaceholder}`} style={{ flex: 2 }}>
-                <h2 style={{ padding: '0 0 1rem 0' }}>Influence Network Topology</h2>
-                <div className={styles.graphMockup} style={{ height: '100%', border: 'none' }}>
+            <div className={styles.dashboardLayout}>
+              <section className={`glass-panel ${styles.mainVisPlaceholder}`}>
+                <div className={styles.panelHeader}>
+                  <h2>Influence Network Topology</h2>
+                  <span className={styles.inlineBadge}>{sourceLabel}</span>
+                </div>
+                <div className={styles.graphCanvas}>
                   <NetworkGraph onNodeClick={handleNodeClick} />
                 </div>
               </section>
 
-              {/* Simulation Side Panel */}
-              <div style={{ flex: 1, height: '100%', overflow: 'auto' }}>
+              <div className={styles.sidePanelWrap}>
                 <SimulationPanel selectedNode={selectedNode} />
               </div>
             </div>

@@ -8,11 +8,18 @@ class SocialNetworkGraph:
         Load a directed social network from a space-separated edge list.
         """
         if edge_list_path is None:
-            edge_list_path = Path(__file__).resolve().parents[3] / "dataset" / "edges.txt"
+            project_root = Path(__file__).resolve().parents[3]
+            edge_list_path = project_root / "dataset" / "edges.txt"
 
         self.edge_list_path = Path(edge_list_path)
         if not self.edge_list_path.is_file():
             raise FileNotFoundError(f"Network edge list not found: {self.edge_list_path}")
+
+        project_root = Path(__file__).resolve().parents[3]
+        if self.edge_list_path.is_relative_to(project_root):
+            self.source_label = str(self.edge_list_path.relative_to(project_root))
+        else:
+            self.source_label = self.edge_list_path.name
 
         self.G = nx.read_edgelist(
             self.edge_list_path,
@@ -20,7 +27,7 @@ class SocialNetworkGraph:
             create_using=nx.DiGraph,
         )
         self.num_nodes = self.G.number_of_nodes()
-        
+
         # Add attributes to nodes for the dashboard and influencer ranking.
         self._populate_node_attributes()
 
