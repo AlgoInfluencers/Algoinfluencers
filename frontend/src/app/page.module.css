@@ -64,6 +64,12 @@
     align-items: flex-start;
     gap: var(--spacing-lg);
     margin-bottom: var(--spacing-xl);
+    width: 100%;
+}
+
+.main-content {
+    width: 100%;
+    max-width: none;
 }
 
 .sourceBadge {
