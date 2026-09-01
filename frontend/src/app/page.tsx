@@ -61,7 +61,7 @@ export default function Home() {
           </div>
         </header>
 
-        {activeTab === 'dashboard' && (
+        {activeTab === 'dashboard' ? (
           <>
             {/* Dashboard Metrics */}
             <section className={styles.metricsGrid}>
@@ -93,9 +93,9 @@ export default function Home() {
               </div>
             </section>
 
-            <div style={{ display: 'flex', gap: '2rem', height: '600px' }}>
+            <div style={{ display: 'flex', gap: '2rem', minHeight: '600px', width: '100%', maxWidth: '100%', minWidth: 0, flexWrap: 'wrap' }}>
               {/* Main Visualization */}
-              <section className={`glass-panel ${styles.mainVisPlaceholder}`} style={{ flex: 2 }}>
+              <section className={`glass-panel ${styles.mainVisPlaceholder}`} style={{ flex: '2 1 420px', minWidth: 0, width: '100%' }}>
                 <h2 style={{ padding: '0 0 1rem 0' }}>Influence Network Topology</h2>
                 <div className={styles.graphMockup} style={{ height: '100%', border: 'none' }}>
                   <NetworkGraph onNodeClick={handleNodeClick} />
@@ -103,14 +103,12 @@ export default function Home() {
               </section>
 
               {/* Simulation Side Panel */}
-              <div style={{ flex: 1, height: '100%', overflow: 'auto' }}>
+              <div style={{ flex: '1 1 320px', minWidth: 0, maxWidth: '100%', height: '100%', overflow: 'auto' }}>
                 <SimulationPanel selectedNode={selectedNode} />
               </div>
             </div>
           </>
-        )}
-
-        {activeTab === 'prediction' && (
+        ) : (
           <ViralPrediction />
         )}
       </main>

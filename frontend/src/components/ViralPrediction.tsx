@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { api } from '@/lib/api';
 import styles from './ViralPrediction.module.css';
 
-const PLATFORMS = ['Instagram', 'X', 'TikTok', 'YouTube Shorts'];
+const PLATFORMS = ['Instagram', 'X', 'YouTube Shorts'];
 const CONTENT_TYPES = ['text', 'image', 'video', 'carousel'];
 const TOPICS = ['Sports', 'Technology', 'Politics', 'Education', 'Entertainment', 'Lifestyle'];
 
