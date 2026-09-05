@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List, Optional
 from app.models.graph import network_graph
 from app.models.diffusion import independent_cascade, linear_threshold
@@ -8,9 +8,9 @@ router = APIRouter(prefix="/api/simulation", tags=["Influence Simulation"])
 
 class SimulationRequest(BaseModel):
     model_type: str  # "ic" or "lt"
-    seed_nodes: List[int]
-    probability: Optional[float] = 0.1
-    steps: Optional[int] = 10
+    seed_nodes: List[int] = Field(min_length=1)
+    probability: float = 0.1
+    steps: int = 10
 
 @router.post("/run")
 async def run_simulation(req: SimulationRequest):
