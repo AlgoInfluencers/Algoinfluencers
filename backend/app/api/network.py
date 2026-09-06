@@ -1,4 +1,4 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 from app.models.graph import network_graph
 
 router = APIRouter(prefix="/api/network", tags=["Network Graph"])
@@ -11,7 +11,7 @@ async def get_network():
     return network_graph.get_graph_data()
 
 @router.get("/influencers")
-async def get_top_influencers(limit: int = 10):
+async def get_top_influencers(limit: int = Query(10, ge=1)):
     """
     Returns the top influential users in the network based on PageRank and Engagement.
     """
