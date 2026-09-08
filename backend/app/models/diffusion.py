@@ -1,5 +1,4 @@
 import random
-from app.models.graph import network_graph
 
 def independent_cascade(graph, seed_nodes, prob=0.1, steps=10):
     """
@@ -10,6 +9,7 @@ def independent_cascade(graph, seed_nodes, prob=0.1, steps=10):
     newly_active = set(seed_nodes)
     
     cascade_history = [{"step": 0, "new_activations": list(newly_active), "total_active": len(active_nodes)}]
+    propagation_paths = []
     
     for step in range(1, steps + 1):
         if not newly_active:
@@ -30,6 +30,11 @@ def independent_cascade(graph, seed_nodes, prob=0.1, steps=10):
                 
                 if random.random() < base_prob:
                     current_step_activations.add(neighbor)
+                    propagation_paths.append({
+                        "from": node,
+                        "to": neighbor,
+                        "step": step
+                    })
                     
         active_nodes.update(current_step_activations)
         newly_active = current_step_activations
@@ -45,7 +50,8 @@ def independent_cascade(graph, seed_nodes, prob=0.1, steps=10):
         "seed_nodes": seed_nodes,
         "total_activated": len(active_nodes),
         "reach_percentage": round((len(active_nodes) / graph.number_of_nodes()) * 100, 2),
-        "history": cascade_history
+        "history": cascade_history,
+        "propagation_paths": propagation_paths
     }
 
 
@@ -64,6 +70,7 @@ def linear_threshold(graph, seed_nodes, steps=10):
     newly_active = set(seed_nodes)
     
     cascade_history = [{"step": 0, "new_activations": list(newly_active), "total_active": len(active_nodes)}]
+    propagation_paths = []
     
     for step in range(1, steps + 1):
         if not newly_active:
@@ -71,25 +78,35 @@ def linear_threshold(graph, seed_nodes, steps=10):
             
         current_step_activations = set()
         
-        # Consider all currently inactive nodes that have at least one active neighbor
-        inactive_nodes = set(graph.nodes()) - active_nodes
-        
-        for node in inactive_nodes:
+        # Only inactive nodes connected to newly activated nodes can have their influence changed in this step.
+        candidate_nodes = set()
+
+        for source in newly_active:
+            candidate_nodes.update(graph.neighbors(source))
+
+        candidate_nodes -= active_nodes
+
+        for node in candidate_nodes:
             neighbors = list(graph.neighbors(node))
             if not neighbors:
                 continue
-                
+
             active_neighbors = [n for n in neighbors if n in active_nodes]
             if not active_neighbors:
                 continue
-                
-            # In a basic unweighted graph, we can use the fraction of active neighbors
-            # or assign random weights to edges that sum to <= 1
-            # Here, we use fraction of total degree as weight
+
+            # Use the fraction of active neighbors as the influence value.
             influence_sum = len(active_neighbors) / len(neighbors)
-            
-            if influence_sum >= graph.nodes[node]['threshold']:
+
+            if influence_sum >= graph.nodes[node]["threshold"]:
                 current_step_activations.add(node)
+
+            for source in active_neighbors:
+                propagation_paths.append({
+                    "from": source,
+                    "to": node,
+                    "step": step
+                })
                 
         active_nodes.update(current_step_activations)
         newly_active = current_step_activations
@@ -105,5 +122,6 @@ def linear_threshold(graph, seed_nodes, steps=10):
         "seed_nodes": seed_nodes,
         "total_activated": len(active_nodes),
         "reach_percentage": round((len(active_nodes) / graph.number_of_nodes()) * 100, 2),
-        "history": cascade_history
+        "history": cascade_history,
+        "propagation_paths": propagation_paths
     }
