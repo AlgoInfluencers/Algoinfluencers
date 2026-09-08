@@ -9,8 +9,8 @@ router = APIRouter(prefix="/api/simulation", tags=["Influence Simulation"])
 class SimulationRequest(BaseModel):
     model_type: str  # "ic" or "lt"
     seed_nodes: List[int] = Field(min_length=1)
-    probability: float = 0.1
-    steps: int = 10
+    probability: float = Field(default=0.1, ge=0, le=1)
+    steps: int = Field(default=10, ge=0)
 
 @router.post("/run")
 async def run_simulation(req: SimulationRequest):
