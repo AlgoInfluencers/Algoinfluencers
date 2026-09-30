@@ -1,218 +1,797 @@
 """
-Train the viral prediction model on the Kaggle Social Media Viral Content dataset.
+AlgoInfluencers - Viral Prediction Model Training
 
-Usage:
-    cd backend
-    .venv/bin/python -m app.models.train_model
-
-This script:
-1. Loads dataset/social_media_viral_content_dataset.csv
-2. Cleans, encodes categoricals, and engineers features
-3. Trains RandomForest and GradientBoosting classifiers
-4. Evaluates (classification report + AUC-ROC)
-5. Saves the best model + scaler + metadata to backend/app/models/saved/
+This version:
+1. Removes post-performance variables that can cause data leakage.
+2. Uses One-Hot Encoding for categorical variables.
+3. Creates time and hashtag features.
+4. Compares Random Forest and Gradient Boosting.
+5. Evaluates accuracy, precision, recall, F1 and AUC.
 """
 
+from pathlib import Path
+import json
+import joblib
 import numpy as np
 import pandas as pd
-from pathlib import Path
+
+from sklearn.model_selection import train_test_split, StratifiedKFold, cross_val_score
+from sklearn.preprocessing import StandardScaler, OneHotEncoder
+from sklearn.compose import ColumnTransformer
+from sklearn.pipeline import Pipeline
+
 from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
-from sklearn.model_selection import train_test_split, cross_val_score
-from sklearn.preprocessing import StandardScaler, LabelEncoder
-from sklearn.metrics import classification_report, roc_auc_score, confusion_matrix
-import joblib
-import json
 
-# --- Config ---
+from sklearn.metrics import (
+    accuracy_score,
+    precision_score,
+    recall_score,
+    f1_score,
+    roc_auc_score,
+    classification_report,
+    confusion_matrix,
+)
+
+
+# ============================================================
+# PATHS
+# ============================================================
+
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
-DATASET_PATH = PROJECT_ROOT / "dataset" / "social_media_viral_content_dataset.csv"
-SAVE_DIR = Path(__file__).resolve().parent / "saved"
 
-TARGET = 'is_viral'
+DATA_PATH = (
+    PROJECT_ROOT
+    / "dataset"
+    / "social_media_viral_content_dataset.csv"
+)
 
-# Features that the API will accept for prediction
-API_FEATURES = [
-    'views', 'likes', 'comments', 'shares',
-    'engagement_rate', 'sentiment_score',
-    'num_hashtags', 'posting_hour', 'posting_month',
-    'platform_encoded', 'content_type_encoded', 'topic_encoded',
-    'log_views', 'log_likes', 'like_share_ratio', 'comment_rate'
+SAVE_DIR = (
+    PROJECT_ROOT
+    / "backend"
+    / "app"
+    / "models"
+    / "saved"
+)
+
+SAVE_DIR.mkdir(parents=True, exist_ok=True)
+
+
+# ============================================================
+# CONFIGURATION
+# ============================================================
+
+TARGET = "is_viral"
+
+# These variables describe post performance.
+# We exclude them to avoid target leakage.
+
+LEAKAGE_FEATURES = [
+    "views",
+    "likes",
+    "comments",
+    "shares",
+    "engagement_rate",
+]
+
+ID_FEATURES = [
+    "post_id",
 ]
 
 
-def load_and_preprocess(path: Path):
-    """Load the Kaggle CSV and engineer features."""
-    df = pd.read_csv(path)
-    print(f"📂 Loaded dataset: {df.shape[0]} rows, {df.shape[1]} columns")
-    print(f"   Viral: {df[TARGET].sum()} ({df[TARGET].mean()*100:.1f}%) | Non-viral: {(~df[TARGET].astype(bool)).sum()} ({(1-df[TARGET].mean())*100:.1f}%)")
+# ============================================================
+# LOAD DATASET
+# ============================================================
 
-    # --- Data Cleaning ---
-    # Clip extreme engagement_rate outliers (some values > 1.0 look like data errors)
-    q99 = df['engagement_rate'].quantile(0.99)
-    n_clipped = (df['engagement_rate'] > q99).sum()
-    df['engagement_rate'] = df['engagement_rate'].clip(upper=q99)
-    if n_clipped > 0:
-        print(f"   ✂️  Clipped {n_clipped} engagement_rate outliers (> {q99:.4f})")
+def load_dataset():
 
-    # --- Feature Engineering ---
+    print("\n📂 Loading dataset...")
 
-    # Count hashtags from the hashtags string
-    df['num_hashtags'] = df['hashtags'].fillna('').apply(lambda x: len([h for h in x.split() if h.startswith('#')]))
+    df = pd.read_csv(DATA_PATH)
 
-    # Extract posting hour and month from datetime
-    df['post_datetime'] = pd.to_datetime(df['post_datetime'], errors='coerce')
-    df['posting_hour'] = df['post_datetime'].dt.hour
-    df['posting_month'] = df['post_datetime'].dt.month
+    print(
+        f"   Dataset shape: "
+        f"{df.shape[0]} rows × {df.shape[1]} columns"
+    )
 
-    # Encode categorical columns
-    label_encoders = {}
-    for col in ['platform', 'content_type', 'topic']:
-        le = LabelEncoder()
-        df[f'{col}_encoded'] = le.fit_transform(df[col].fillna('unknown'))
-        label_encoders[col] = le
-        print(f"   📌 {col}: {list(le.classes_)}")
+    print("\n   Columns:")
 
-    # Log transforms for skewed numerical features
-    df['log_views'] = np.log1p(df['views'])
-    df['log_likes'] = np.log1p(df['likes'])
+    for column in df.columns:
+        print(f"   • {column}")
 
-    # Ratio features
-    df['like_share_ratio'] = df['likes'] / (df['shares'] + 1)
-    df['comment_rate'] = df['comments'] / (df['views'] + 1)
+    return df
 
-    X = df[API_FEATURES].copy()
+
+# ============================================================
+# CLEAN DATA
+# ============================================================
+
+def clean_data(df):
+
+    print("\n🧹 Cleaning dataset...")
+
+    df = df.copy()
+
+    # Remove duplicate rows
+    before = len(df)
+
+    df = df.drop_duplicates()
+
+    print(
+        f"   Removed duplicates: "
+        f"{before - len(df)}"
+    )
+
+    # Make target numeric
+    df[TARGET] = pd.to_numeric(
+        df[TARGET],
+        errors="coerce"
+    )
+
+    # Remove rows with missing target
+    before = len(df)
+
+    df = df.dropna(
+        subset=[TARGET]
+    )
+
+    print(
+        f"   Removed rows with missing target: "
+        f"{before - len(df)}"
+    )
+
+    df[TARGET] = df[TARGET].astype(int)
+
+    # Convert datetime
+    df["post_datetime"] = pd.to_datetime(
+        df["post_datetime"],
+        errors="coerce"
+    )
+
+    # Remove invalid dates
+    before = len(df)
+
+    df = df.dropna(
+        subset=["post_datetime"]
+    )
+
+    print(
+        f"   Removed rows with invalid dates: "
+        f"{before - len(df)}"
+    )
+
+    # Fill categorical missing values
+    categorical_columns = [
+        "platform",
+        "content_type",
+        "topic",
+        "language",
+        "region",
+    ]
+
+    for column in categorical_columns:
+
+        df[column] = (
+            df[column]
+            .fillna("Unknown")
+            .astype(str)
+        )
+
+    # Fill missing hashtags
+    df["hashtags"] = (
+        df["hashtags"]
+        .fillna("")
+        .astype(str)
+    )
+
+    # Convert sentiment to numeric
+    df["sentiment_score"] = pd.to_numeric(
+        df["sentiment_score"],
+        errors="coerce"
+    )
+
+    # Fill missing sentiment with median
+    df["sentiment_score"] = (
+        df["sentiment_score"]
+        .fillna(
+            df["sentiment_score"].median()
+        )
+    )
+
+    print(
+        f"   Final cleaned dataset: "
+        f"{len(df)} rows"
+    )
+
+    return df
+
+
+# ============================================================
+# FEATURE ENGINEERING
+# ============================================================
+
+def engineer_features(df):
+
+    print("\n🔧 Engineering features...")
+
+    df = df.copy()
+
+    # --------------------------------------------------------
+    # TIME FEATURES
+    # --------------------------------------------------------
+
+    df["posting_hour"] = (
+        df["post_datetime"].dt.hour
+    )
+
+    df["posting_day"] = (
+        df["post_datetime"].dt.day
+    )
+
+    df["posting_dayofweek"] = (
+        df["post_datetime"].dt.dayofweek
+    )
+
+    df["posting_month"] = (
+        df["post_datetime"].dt.month
+    )
+
+    df["is_weekend"] = (
+        df["posting_dayofweek"] >= 5
+    ).astype(int)
+
+    # --------------------------------------------------------
+    # HASHTAG COUNT
+    # --------------------------------------------------------
+
+    def count_hashtags(value):
+
+        if not value:
+            return 0
+
+        value = value.replace(",", " ")
+
+        return sum(
+            word.startswith("#")
+            for word in value.split()
+        )
+
+    df["num_hashtags"] = (
+        df["hashtags"]
+        .apply(count_hashtags)
+    )
+
+    # --------------------------------------------------------
+    # FEATURES
+    # --------------------------------------------------------
+
+    numeric_features = [
+        "sentiment_score",
+        "num_hashtags",
+        "posting_hour",
+        "posting_day",
+        "posting_dayofweek",
+        "posting_month",
+        "is_weekend",
+    ]
+
+    categorical_features = [
+        "platform",
+        "content_type",
+        "topic",
+        "language",
+        "region",
+    ]
+
+    X = df[
+        numeric_features +
+        categorical_features
+    ].copy()
+
     y = df[TARGET].copy()
 
-    return X, y, label_encoders, df.shape[0]
+    print(
+        f"\n📊 Numeric features "
+        f"({len(numeric_features)}):"
+    )
 
+    for feature in numeric_features:
+        print(f"   • {feature}")
+
+    print(
+        f"\n📊 Categorical features "
+        f"({len(categorical_features)}):"
+    )
+
+    for feature in categorical_features:
+        print(f"   • {feature}")
+
+    return (
+        X,
+        y,
+        numeric_features,
+        categorical_features
+    )
+
+
+# ============================================================
+# CREATE PREPROCESSOR
+# ============================================================
+
+def create_preprocessor(
+    numeric_features,
+    categorical_features
+):
+
+    # Numeric columns:
+    # StandardScaler puts values onto a similar scale.
+
+    numeric_transformer = Pipeline(
+        steps=[
+            (
+                "scaler",
+                StandardScaler()
+            )
+        ]
+    )
+
+    # Categorical columns:
+    # OneHotEncoder converts categories into 0/1 columns.
+
+    categorical_transformer = Pipeline(
+        steps=[
+            (
+                "onehot",
+                OneHotEncoder(
+                    handle_unknown="ignore"
+                )
+            )
+        ]
+    )
+
+    preprocessor = ColumnTransformer(
+        transformers=[
+            (
+                "numeric",
+                numeric_transformer,
+                numeric_features
+            ),
+            (
+                "categorical",
+                categorical_transformer,
+                categorical_features
+            ),
+        ]
+    )
+
+    return preprocessor
+
+
+# ============================================================
+# EVALUATE MODEL
+# ============================================================
+
+def evaluate_model(
+    model,
+    X_test,
+    y_test,
+    model_name
+):
+
+    predictions = model.predict(
+        X_test
+    )
+
+    probabilities = model.predict_proba(
+        X_test
+    )[:, 1]
+
+    accuracy = accuracy_score(
+        y_test,
+        predictions
+    )
+
+    precision = precision_score(
+        y_test,
+        predictions,
+        zero_division=0
+    )
+
+    recall = recall_score(
+        y_test,
+        predictions,
+        zero_division=0
+    )
+
+    f1 = f1_score(
+        y_test,
+        predictions,
+        zero_division=0
+    )
+
+    auc = roc_auc_score(
+        y_test,
+        probabilities
+    )
+
+    print(
+        f"\n📋 {model_name} — Test Results"
+    )
+
+    print(
+        f"   Accuracy : {accuracy:.4f}"
+    )
+
+    print(
+        f"   Precision: {precision:.4f}"
+    )
+
+    print(
+        f"   Recall   : {recall:.4f}"
+    )
+
+    print(
+        f"   F1 Score : {f1:.4f}"
+    )
+
+    print(
+        f"   AUC-ROC  : {auc:.4f}"
+    )
+
+    print("\n   Classification Report:")
+
+    print(
+        classification_report(
+            y_test,
+            predictions,
+            target_names=[
+                "Not Viral",
+                "Viral"
+            ],
+            zero_division=0
+        )
+    )
+
+    tn, fp, fn, tp = (
+        confusion_matrix(
+            y_test,
+            predictions
+        ).ravel()
+    )
+
+    print(
+        f"   Confusion Matrix: "
+        f"TN={tn} "
+        f"FP={fp} "
+        f"FN={fn} "
+        f"TP={tp}"
+    )
+
+    return {
+        "accuracy": accuracy,
+        "precision": precision,
+        "recall": recall,
+        "f1": f1,
+        "auc": auc,
+    }
+
+
+# ============================================================
+# TRAIN MODELS
+# ============================================================
 
 def train_and_evaluate():
-    """Full training pipeline."""
-    print("=" * 60)
-    print("🚀 AlgoInfluencers — Viral Prediction Model Training")
-    print("   Dataset: Kaggle Social Media Viral Content")
-    print("=" * 60)
 
-    # 1. Load data
-    X, y, label_encoders, total_rows = load_and_preprocess(DATASET_PATH)
-    feature_names = list(X.columns)
-    print(f"\n📊 Features ({len(feature_names)}):")
-    for f in feature_names:
-        print(f"   • {f}")
+    print("=" * 65)
 
-    # 2. Train/test split
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=42, stratify=y
+    print(
+        "🚀 AlgoInfluencers — Viral Prediction Model Training"
     )
-    print(f"\n📐 Split: {X_train.shape[0]} train / {X_test.shape[0]} test")
 
-    # 3. Scale features
-    scaler = StandardScaler()
-    X_train_scaled = scaler.fit_transform(X_train)
-    X_test_scaled = scaler.transform(X_test)
-
-    # 4. Train RandomForest
-    print("\n🌲 Training RandomForest...")
-    rf_model = RandomForestClassifier(
-        n_estimators=200,
-        max_depth=8,
-        min_samples_split=10,
-        min_samples_leaf=5,
-        max_features='sqrt',
-        class_weight='balanced',
-        random_state=42,
-        n_jobs=-1
+    print(
+        "   Leakage-controlled + One-Hot Encoding"
     )
-    rf_model.fit(X_train_scaled, y_train)
 
-    cv_scores = cross_val_score(rf_model, X_train_scaled, y_train, cv=5, scoring='roc_auc')
-    print(f"   CV AUC-ROC: {cv_scores.mean():.4f} ± {cv_scores.std():.4f}")
+    print("=" * 65)
 
-    # 5. Evaluate on test set
-    y_pred_rf = rf_model.predict(X_test_scaled)
-    y_proba_rf = rf_model.predict_proba(X_test_scaled)[:, 1]
-    auc_rf = roc_auc_score(y_test, y_proba_rf)
+    # --------------------------------------------------------
+    # LOAD
+    # --------------------------------------------------------
 
-    print(f"\n📋 RandomForest — Test Set Results:")
-    print(classification_report(y_test, y_pred_rf, target_names=["Not Viral", "Viral"]))
-    print(f"   Test AUC-ROC: {auc_rf:.4f}")
+    df = load_dataset()
 
-    cm = confusion_matrix(y_test, y_pred_rf)
-    print(f"   Confusion Matrix: TN={cm[0][0]} FP={cm[0][1]} FN={cm[1][0]} TP={cm[1][1]}")
+    # --------------------------------------------------------
+    # CLEAN
+    # --------------------------------------------------------
 
-    # 6. Train GradientBoosting
-    print("\n🌳 Training GradientBoosting...")
-    gb_model = GradientBoostingClassifier(
-        n_estimators=200,
-        max_depth=4,
-        learning_rate=0.05,
-        min_samples_split=10,
-        min_samples_leaf=5,
-        subsample=0.8,
+    df = clean_data(df)
+
+    # --------------------------------------------------------
+    # EXCLUDED VARIABLES
+    # --------------------------------------------------------
+
+    print(
+        "\n🚫 Excluded from prediction:"
+    )
+
+    for feature in ID_FEATURES:
+        print(
+            f"   • {feature} "
+            f"(identifier)"
+        )
+
+    for feature in LEAKAGE_FEATURES:
+        print(
+            f"   • {feature} "
+            f"(post-performance / leakage risk)"
+        )
+
+    # --------------------------------------------------------
+    # FEATURE ENGINEERING
+    # --------------------------------------------------------
+
+    (
+        X,
+        y,
+        numeric_features,
+        categorical_features
+    ) = engineer_features(df)
+
+    # --------------------------------------------------------
+    # TARGET DISTRIBUTION
+    # --------------------------------------------------------
+
+    print("\n🎯 Target distribution:")
+
+    print(
+        y.value_counts()
+        .sort_index()
+    )
+
+    # --------------------------------------------------------
+    # TRAIN / TEST SPLIT
+    # --------------------------------------------------------
+
+    X_train, X_test, y_train, y_test = (
+        train_test_split(
+            X,
+            y,
+            test_size=0.20,
+            random_state=42,
+            stratify=y
+        )
+    )
+
+    print(
+        f"\n📐 Split: "
+        f"{len(X_train)} train / "
+        f"{len(X_test)} test"
+    )
+
+# ============================================================
+# MAJORITY-CLASS BASELINE
+# ============================================================
+
+    majority_class = y_train.mode()[0]
+
+    baseline_predictions = np.full(
+        len(y_test),
+        majority_class
+    )
+
+    baseline_accuracy = accuracy_score(
+        y_test,
+        baseline_predictions
+    )
+
+    print("\n" + "=" * 60)
+    print("MAJORITY-CLASS BASELINE")
+    print("=" * 60)
+
+    print(f"Majority class: {majority_class}")
+    print(f"Baseline Accuracy: {baseline_accuracy:.4f}")
+
+    # --------------------------------------------------------
+    # PREPROCESSOR
+    # --------------------------------------------------------
+
+    preprocessor = create_preprocessor(
+        numeric_features,
+        categorical_features
+    )
+
+    # --------------------------------------------------------
+    # RANDOM FOREST PIPELINE
+    # --------------------------------------------------------
+
+    print(
+        "\n🌲 Training RandomForest..."
+    )
+
+    random_forest = Pipeline(
+        steps=[
+            (
+                "preprocessor",
+                preprocessor
+            ),
+            (
+                "model",
+                RandomForestClassifier(
+                    n_estimators=300,
+                    min_samples_split=4,
+                    min_samples_leaf=2,
+                    class_weight="balanced",
+                    random_state=42,
+                    n_jobs=-1
+                )
+            )
+        ]
+    )
+
+    random_forest.fit(
+        X_train,
+        y_train
+    )
+
+    cv = StratifiedKFold(
+        n_splits=5,
+        shuffle=True,
         random_state=42
     )
-    gb_model.fit(X_train_scaled, y_train)
-    y_proba_gb = gb_model.predict_proba(X_test_scaled)[:, 1]
-    auc_gb = roc_auc_score(y_test, y_proba_gb)
-    print(f"   GradientBoosting Test AUC-ROC: {auc_gb:.4f}")
 
-    # 7. Pick best model
-    if auc_rf >= auc_gb:
-        best_model, best_name, best_auc = rf_model, "RandomForest", auc_rf
-        importances = rf_model.feature_importances_
+    cv_auc = cross_val_score(
+        random_forest,
+        X_train,
+        y_train,
+        cv=cv,
+        scoring="roc_auc",
+        n_jobs=-1
+    )
+
+    print(
+        f"   CV AUC-ROC: "
+        f"{cv_auc.mean():.4f} "
+        f"± {cv_auc.std():.4f}"
+    )
+
+    rf_metrics = evaluate_model(
+        random_forest,
+        X_test,
+        y_test,
+        "RandomForest"
+    )
+
+    # --------------------------------------------------------
+    # GRADIENT BOOSTING
+    # --------------------------------------------------------
+
+    print(
+        "\n🌳 Training GradientBoosting..."
+    )
+
+    gradient_boosting = Pipeline(
+        steps=[
+            (
+                "preprocessor",
+                create_preprocessor(
+                    numeric_features,
+                    categorical_features
+                )
+            ),
+            (
+                "model",
+                GradientBoostingClassifier(
+                    n_estimators=200,
+                    learning_rate=0.05,
+                    max_depth=3,
+                    random_state=42
+                )
+            )
+        ]
+    )
+
+    gradient_boosting.fit(
+        X_train,
+        y_train
+    )
+
+    gb_metrics = evaluate_model(
+        gradient_boosting,
+        X_test,
+        y_test,
+        "GradientBoosting"
+    )
+
+    # --------------------------------------------------------
+    # SELECT BEST MODEL
+    # --------------------------------------------------------
+
+    if rf_metrics["auc"] >= gb_metrics["auc"]:
+
+        best_model = random_forest
+        best_name = "RandomForest"
+        best_metrics = rf_metrics
+
     else:
-        best_model, best_name, best_auc = gb_model, "GradientBoosting", auc_gb
-        importances = gb_model.feature_importances_
 
-    print(f"\n✅ Best model: {best_name} (AUC: {best_auc:.4f})")
+        best_model = gradient_boosting
+        best_name = "GradientBoosting"
+        best_metrics = gb_metrics
 
-    # 8. Feature importance
-    sorted_idx = np.argsort(importances)[::-1]
-    print(f"\n🏆 Feature Importance:")
-    for i in sorted_idx:
-        bar = "█" * int(importances[i] * 50)
-        print(f"   {feature_names[i]:25s} {importances[i]:.4f} {bar}")
+    print(
+        f"\n✅ Best model: "
+        f"{best_name}"
+    )
 
-    # 9. Save everything
-    SAVE_DIR.mkdir(parents=True, exist_ok=True)
+    print(
+        f"   AUC-ROC: "
+        f"{best_metrics['auc']:.4f}"
+    )
+
+    # --------------------------------------------------------
+    # SAVE COMPLETE PIPELINE
+    # --------------------------------------------------------
 
     model_path = SAVE_DIR / "model.joblib"
-    scaler_path = SAVE_DIR / "scaler.joblib"
-    encoders_path = SAVE_DIR / "label_encoders.joblib"
     metadata_path = SAVE_DIR / "metadata.json"
 
-    joblib.dump(best_model, model_path)
-    joblib.dump(scaler, scaler_path)
-    joblib.dump(label_encoders, encoders_path)
+    # The pipeline contains:
+    # preprocessing + model
 
-    # Save encoder mappings as JSON-friendly format
-    encoder_mappings = {}
-    for col, le in label_encoders.items():
-        encoder_mappings[col] = {label: int(idx) for idx, label in enumerate(le.classes_)}
+    joblib.dump(
+        best_model,
+        model_path
+    )
 
     metadata = {
-        "model_type": best_name,
-        "auc_roc": round(best_auc, 4),
-        "dataset": "social_media_viral_content_dataset.csv",
-        "dataset_rows": total_rows,
-        "features": feature_names,
-        "feature_importances": {
-            feature_names[i]: round(float(importances[i]), 4) for i in sorted_idx
+        "model_name": best_name,
+        "target": TARGET,
+        "prediction_type": "early_virality_prediction",
+        "numeric_features": numeric_features,
+        "categorical_features": categorical_features,
+        "excluded_features": ID_FEATURES + LEAKAGE_FEATURES,
+        "metrics": {
+            key: float(value)
+            for key, value in best_metrics.items()
         },
-        "label_encoders": encoder_mappings,
-        "n_train_samples": int(X_train.shape[0]),
-        "n_test_samples": int(X_test.shape[0])
+        "dataset_rows": int(len(df)),
+        "training_rows": int(len(X_train)),
+        "test_rows": int(len(X_test)),
+        "random_state": 42,
     }
-    with open(metadata_path, 'w') as f:
-        json.dump(metadata, f, indent=2)
 
-    print(f"\n💾 Saved to: {SAVE_DIR}/")
-    print(f"   • model.joblib ({model_path.stat().st_size / 1024:.1f} KB)")
-    print(f"   • scaler.joblib")
-    print(f"   • label_encoders.joblib")
-    print(f"   • metadata.json")
-    print("\n🎉 Training complete!")
+    with open(
+        metadata_path,
+        "w",
+        encoding="utf-8"
+    ) as file:
 
+        json.dump(
+            metadata,
+            file,
+            indent=4
+        )
+
+    print(
+        "\n💾 Saved:"
+    )
+
+    print(
+        f"   • {model_path}"
+    )
+
+    print(
+        f"   • {metadata_path}"
+    )
+
+    print(
+        "\n🎉 Training complete!"
+    )
+
+
+# ============================================================
+# MAIN
+# ============================================================
 
 if __name__ == "__main__":
+
     train_and_evaluate()
