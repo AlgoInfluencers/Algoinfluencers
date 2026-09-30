@@ -1,66 +1,40 @@
 {
-  "model_type": "RandomForest",
-  "auc_roc": 1.0,
-  "dataset": "social_media_viral_content_dataset.csv",
-  "dataset_rows": 2000,
-  "features": [
-    "views",
-    "likes",
-    "comments",
-    "shares",
-    "engagement_rate",
-    "sentiment_score",
-    "num_hashtags",
-    "posting_hour",
-    "posting_month",
-    "platform_encoded",
-    "content_type_encoded",
-    "topic_encoded",
-    "log_views",
-    "log_likes",
-    "like_share_ratio",
-    "comment_rate"
-  ],
-  "feature_importances": {
-    "log_views": 0.3504,
-    "views": 0.3195,
-    "log_likes": 0.0977,
-    "engagement_rate": 0.0876,
-    "likes": 0.0795,
-    "comment_rate": 0.0511,
-    "like_share_ratio": 0.0104,
-    "shares": 0.001,
-    "comments": 0.001,
-    "sentiment_score": 0.0006,
-    "content_type_encoded": 0.0004,
-    "platform_encoded": 0.0003,
-    "topic_encoded": 0.0002,
-    "posting_month": 0.0002,
-    "num_hashtags": 0.0001,
-    "posting_hour": 0.0
-  },
-  "label_encoders": {
-    "platform": {
-      "Instagram": 0,
-      "TikTok": 1,
-      "X": 2,
-      "YouTube Shorts": 3
+    "model_name": "GradientBoosting",
+    "target": "is_viral",
+    "prediction_type": "early_virality_prediction",
+    "numeric_features": [
+        "sentiment_score",
+        "num_hashtags",
+        "posting_hour",
+        "posting_day",
+        "posting_dayofweek",
+        "posting_month",
+        "is_weekend"
+    ],
+    "categorical_features": [
+        "platform",
+        "content_type",
+        "topic",
+        "language",
+        "region"
+    ],
+    "excluded_features": [
+        "post_id",
+        "views",
+        "likes",
+        "comments",
+        "shares",
+        "engagement_rate"
+    ],
+    "metrics": {
+        "accuracy": 0.6925,
+        "precision": 0.710455764075067,
+        "recall": 0.9464285714285714,
+        "f1": 0.8116385911179173,
+        "auc": 0.4967857142857142
     },
-    "content_type": {
-      "carousel": 0,
-      "image": 1,
-      "text": 2,
-      "video": 3
-    },
-    "topic": {
-      "Education": 0,
-      "Entertainment": 1,
-      "Lifestyle": 2,
-      "Politics": 3,
-      "Sports": 4,
-      "Technology": 5
-    }
-  },
-  "n_train_samples": 1600,
-  "n_test_samples": 400
+    "dataset_rows": 2000,
+    "training_rows": 1600,
+    "test_rows": 400,
+    "random_state": 42
 }
