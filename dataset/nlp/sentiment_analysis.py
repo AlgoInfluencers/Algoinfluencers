@@ -137,6 +137,50 @@ for index, text in enumerate(df["clean_text"], start=1):
 df["predicted_sentiment"] = predicted_sentiments
 df["sentiment_confidence"] = sentiment_confidences
 
+# ============================================================
+# SENTIMENT FEATURE ENGINEERING
+# ============================================================
+
+print("\n" + "=" * 60)
+print("SENTIMENT FEATURE ENGINEERING")
+print("=" * 60)
+
+# Convert predicted sentiment into numerical features.
+# These are one-hot encoded sentiment indicators.
+
+df["sentiment_negative"] = (
+    df["predicted_sentiment"] == "negative"
+).astype(int)
+
+df["sentiment_neutral"] = (
+    df["predicted_sentiment"] == "neutral"
+).astype(int)
+
+df["sentiment_positive"] = (
+    df["predicted_sentiment"] == "positive"
+).astype(int)
+
+
+print("\nNumerical sentiment features created:")
+print("• sentiment_negative")
+print("• sentiment_neutral")
+print("• sentiment_positive")
+print("• sentiment_confidence")
+
+
+print("\nExample:")
+
+print(
+    df[
+        [
+            "predicted_sentiment",
+            "sentiment_confidence",
+            "sentiment_negative",
+            "sentiment_neutral",
+            "sentiment_positive"
+        ]
+    ].head(5)
+)
 
 # ============================================================
 # SENTIMENT SUMMARY
@@ -224,3 +268,146 @@ print(f"\nFinal dataset shape: {df.shape}")
 print("\nNew columns added:")
 print("• predicted_sentiment")
 print("• sentiment_confidence")
+
+# ============================================================
+# NLP RESULT ANALYSIS
+# ============================================================
+
+print("\n" + "=" * 60)
+print("NLP RESULT ANALYSIS")
+print("=" * 60)
+
+
+# ------------------------------------------------------------
+# 1. Sentiment distribution
+# ------------------------------------------------------------
+
+print("\n1. SENTIMENT DISTRIBUTION")
+
+sentiment_distribution = (
+    df["predicted_sentiment"]
+    .value_counts()
+    .sort_index()
+)
+
+print(sentiment_distribution)
+
+
+# ------------------------------------------------------------
+# 2. Average confidence by sentiment
+# ------------------------------------------------------------
+
+print("\n2. AVERAGE CONFIDENCE BY SENTIMENT")
+
+confidence_by_sentiment = (
+    df.groupby("predicted_sentiment")["sentiment_confidence"]
+    .mean()
+    .sort_values(ascending=False)
+)
+
+print(confidence_by_sentiment)
+
+
+# ------------------------------------------------------------
+# 3. Low-confidence predictions
+# ------------------------------------------------------------
+
+print("\n3. LOW-CONFIDENCE PREDICTIONS")
+
+low_confidence = df[
+    df["sentiment_confidence"] < 0.60
+]
+
+print(
+    f"Predictions below 60% confidence: "
+    f"{len(low_confidence)}"
+)
+
+print(
+    f"Percentage: "
+    f"{len(low_confidence) / len(df) * 100:.2f}%"
+)
+
+
+# ------------------------------------------------------------
+# 4. Sentiment and political indicators
+# ------------------------------------------------------------
+
+print("\n4. SENTIMENT BY POLITICAL INDICATORS")
+
+if "is_left" in df.columns:
+
+    print("\nAverage sentiment confidence for left-indicator posts:")
+
+    left_posts = df[df["is_left"] == 1]
+
+    print(f"Posts: {len(left_posts)}")
+
+    if len(left_posts) > 0:
+        print(
+            left_posts["predicted_sentiment"]
+            .value_counts()
+        )
+
+
+if "is_right" in df.columns:
+
+    print("\nAverage sentiment confidence for right-indicator posts:")
+
+    right_posts = df[df["is_right"] == 1]
+
+    print(f"Posts: {len(right_posts)}")
+
+    if len(right_posts) > 0:
+        print(
+            right_posts["predicted_sentiment"]
+            .value_counts()
+        )
+
+
+# ------------------------------------------------------------
+# 5. Election-related posts
+# ------------------------------------------------------------
+
+print("\n5. ELECTION-RELATED POSTS")
+
+if "mentions_election" in df.columns:
+
+    election_posts = df[
+        df["mentions_election"] == 1
+    ]
+
+    print(
+        f"Election-related posts: "
+        f"{len(election_posts)}"
+    )
+
+    if len(election_posts) > 0:
+        print(
+            election_posts["predicted_sentiment"]
+            .value_counts()
+        )
+
+
+# ------------------------------------------------------------
+# 6. Campaign-related posts
+# ------------------------------------------------------------
+
+print("\n6. CAMPAIGN-RELATED POSTS")
+
+if "mentions_campaign" in df.columns:
+
+    campaign_posts = df[
+        df["mentions_campaign"] == 1
+    ]
+
+    print(
+        f"Campaign-related posts: "
+        f"{len(campaign_posts)}"
+    )
+
+    if len(campaign_posts) > 0:
+        print(
+            campaign_posts["predicted_sentiment"]
+            .value_counts()
+        )
