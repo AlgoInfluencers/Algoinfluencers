@@ -8,7 +8,7 @@ class SocialNetworkGraph:
         Load a directed social network from a space-separated edge list.
         """
         if edge_list_path is None:
-            edge_list_path = Path(__file__).resolve().parents[3] / "dataset" / "edges.txt"
+            edge_list_path = Path(__file__).resolve().parents[3] / "dataset" / "edges_large.txt"
 
         self.edge_list_path = Path(edge_list_path)
         if not self.edge_list_path.is_file():
@@ -53,11 +53,13 @@ class SocialNetworkGraph:
         
         # Betweenness Centrality (bridges between clusters)
         betweenness_cen = nx.betweenness_centrality(self.G, k=min(100, self.num_nodes)) # approximation for speed
+        closeness_cen = nx.closeness_centrality(self.G) 
         
         for i in self.G.nodes():
             self.G.nodes[i]['pagerank'] = pagerank[i]
             self.G.nodes[i]['degree_centrality'] = degree_cen[i]
             self.G.nodes[i]['betweenness'] = betweenness_cen[i]
+            self.G.nodes[i]['closeness'] = closeness_cen[i]
             
             # Create a composite influence score
             # Normalize followers to 0-1 proxy roughly
@@ -66,6 +68,77 @@ class SocialNetworkGraph:
             # High influence = High PageRank + High Engagement + Many Followers
             score = (pagerank[i] * 100) * 0.4 + (self.G.nodes[i]['engagement_rate'] * 0.3) + (norm_followers * 0.3)
             self.G.nodes[i]['influence_score'] = round(score, 4)
+    
+    def detect_communities(self):
+        """Detect communities in the social network using the Louvain method. Each node is assigned a community ID"""
+        communities = nx.community.louvain_communities(
+            self.G,
+            seed=42
+        )
+    
+        for community_id, community in enumerate(communities):
+            for node in community:
+                self.G.nodes[node]['community'] = community_id
+    
+        return communities
+
+    def get_community_statistics(self):
+        """
+        Calculate statistics for each detected community.
+        """
+
+        # Detect communities if they haven't been assigned yet
+        if 'community' not in next(iter(self.G.nodes(data=True)))[1]:
+            self.detect_communities()
+
+        communities = {}
+
+        # Group nodes by community
+        for node, data in self.G.nodes(data=True):
+            community_id = data['community']
+
+            if community_id not in communities:
+                communities[community_id] = []
+
+            communities[community_id].append(data)
+
+        community_stats = []
+
+        # Calculate statistics for each community
+        for community_id, members in communities.items():
+
+            member_count = len(members)
+
+            top_influencer = max(
+                members,
+                key=lambda x: x.get('influence_score', 0)
+            )
+
+            average_influence = sum(
+                user.get('influence_score', 0)
+                for user in members
+            ) / member_count
+
+            average_engagement = sum(
+                user.get('engagement_rate', 0)
+                for user in members
+            ) / member_count
+
+            total_followers = sum(
+                user.get('followers', 0)
+                for user in members
+            )
+
+            community_stats.append({
+                'community_id': community_id,
+                'member_count': member_count,
+                'top_influencer': top_influencer['username'],
+                'top_influencer_score': top_influencer['influence_score'],
+                'average_influence': round(average_influence, 4),
+                'average_engagement': round(average_engagement, 4),
+                'total_followers': total_followers
+            })
+        return community_stats
 
     def get_graph_data(self):
         """
@@ -95,5 +168,49 @@ class SocialNetworkGraph:
         return sorted_influencers[:limit]
 
 # Singleton instance for the API to use
+# Singleton instance for the API to use
 network_graph = SocialNetworkGraph()
+
 network_graph.calculate_influence_metrics()
+network_graph.detect_communities()
+
+# Testing
+print("Number of nodes:", network_graph.num_nodes)
+
+print("\nSample node:")
+first_node = list(network_graph.G.nodes())[0]
+print(network_graph.G.nodes[first_node])
+
+print("\nTop 5 influencers:")
+for user in network_graph.get_top_influencers(5):
+    print(
+        user["username"],
+        "PageRank:", user["pagerank"],
+        "Closeness:", user["closeness"],
+        "Influence:", user["influence_score"]
+    )
+
+print("\nCommunities:")
+communities = network_graph.detect_communities()
+
+for community_id, community in enumerate(communities):
+    print(
+        f"Community {community_id}:",
+        sorted(community)
+    )
+
+print("\nCommunity Statistics:")
+
+community_stats = network_graph.get_community_statistics()
+
+for stats in community_stats:
+    print(stats)
+
+print("\nNodes with communities:")
+
+for node, data in network_graph.G.nodes(data=True):
+    print(
+        data["username"],
+        "→ Community:",
+        data["community"]
+    )
